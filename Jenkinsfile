@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'mcr.microsoft.com/dotnet/sdk:10.0'
+            args '-u root:root'
+        }
+    }
 
     environment {
         PROJECT_NAME = 'jenkinsTests'
@@ -43,6 +48,9 @@ pipeline {
                     // --- Semver versioning from git tags + commit message ---
                     // Keywords (Spanish): "MAYOR" = major bump, "MINOR" = minor bump, else patch bump.
 
+                    // Ensure zip is available in the container
+                    sh 'apt-get update -qq && apt-get install -y -qq zip'
+
                     // Get latest tag (strip 'v' prefix if present)
                     def latestTag = sh(script: 'git tag --sort=-v:refname | head -1', returnStdout: true).trim()
                     def (major, minor, patch) = [0, 0, 0]
@@ -78,7 +86,7 @@ pipeline {
                     sh "git config user.name 'Jenkins CI'"
                     sh "git config user.email 'jenkins@${env.NODE_NAME}'"
                     sh "git tag -a \"v${version}\" -m \"Version ${version}\""
-                    sh 'git push origin --tags'  // may fail if no credentials — the build won't halt
+                    sh 'git push origin --tags'
 
                     // Build artifact name
                     def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
