@@ -14,6 +14,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                // Mark workspace as safe for git (container user != host user)
+                sh 'git config --global --add safe.directory "$(pwd)"'
             }
         }
 
@@ -92,9 +94,10 @@ pipeline {
                     def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
                     def artifactName = "${PROJECT_NAME}-${fullVersion}.zip"
 
-                    sh "zip -j \"${artifactName}\" ./publish/*"
+                    sh 'mkdir -p /jenkins/artifacts'
+                    sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
 
-                    archiveArtifacts artifacts: artifactName, fingerprint: true
+                    archiveArtifacts artifacts: "/jenkins/artifacts/${artifactName}", fingerprint: true
                 }
             }
         }
