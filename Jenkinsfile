@@ -84,11 +84,18 @@ pipeline {
                     def version = "${major}.${minor}.${patch}"
                     echo "Derived version: ${version} (from commit: ${commitMsg.take(50)})"
 
-                    // Tag the commit
-                    sh "git config user.name 'Jenkins CI'"
-                    sh "git config user.email 'jenkins@${env.NODE_NAME}'"
-                    sh "git tag -a \"v${version}\" -m \"Version ${version}\""
-                    sh 'git push origin --tags'
+                    // Tag the commit and push using GitHub token credential
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-token',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )]) {
+                        sh "git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/ketsalmrd/jenkinsTests.git"
+                        sh "git config user.name 'Jenkins CI'"
+                        sh "git config user.email 'jenkins@${env.NODE_NAME}'"
+                        sh "git tag -a \"v${version}\" -m \"Version ${version}\""
+                        sh 'git push origin --tags'
+                    }
 
                     // Build artifact name
                     def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
