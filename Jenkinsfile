@@ -70,7 +70,7 @@ pipeline {
                     // Get current commit message (first line)
                     def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
 
-                    if (commitMsg.startsWith('MAYOR')) {
+                    if (commitMsg.startsWith('MAJOR')) {
                         major++
                         minor = 0
                         patch = 0
