@@ -104,7 +104,9 @@ pipeline {
                     sh 'mkdir -p /jenkins/artifacts'
                     sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
 
-                    archiveArtifacts artifacts: "/jenkins/artifacts/${artifactName}", fingerprint: true
+                    // Copy to workspace so archiveArtifacts can find it
+                    sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
+                    archiveArtifacts artifacts: "${artifactName}", fingerprint: true
                 }
             }
         }
