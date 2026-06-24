@@ -10,6 +10,44 @@ pipeline {
         PROJECT_NAME = 'jenkinsTests'
     }
 
+    def SemanticVersion()
+    {
+        // --- Semver versioning from git tags + commit message ---
+        // Keywords: "MAJOR" = major bump, "MINOR" = minor bump, else patch bump.
+
+        // Get latest tag (strip 'v' prefix if present)
+        def latestTag = sh(script: 'git tag --sort=-v:refname | head -1', returnStdout: true).trim()
+        def (major, minor, patch) = [0, 0, 0]
+
+        if (latestTag) {
+            def ver = latestTag.replaceAll('^v', '')
+            def parts = ver.split('\\.')
+            if (parts.size() == 3) {
+                major = parts[0] as int
+                minor = parts[1] as int
+                patch = parts[2] as int
+            }
+        }
+
+        // Get current commit message (first line)
+        def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+
+        if (commitMsg.startsWith('MAJOR')) {
+            major++
+            minor = 0
+            patch = 0
+        } else if (commitMsg.startsWith('MINOR')) {
+            minor++
+            patch = 0
+        } else {
+            patch++
+        }
+
+        def version = "${major}.${minor}.${patch}"
+
+        return [version, commitMsg]
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -47,41 +85,12 @@ pipeline {
         stage('Package') {
             steps {
                 script {
-                    // --- Semver versioning from git tags + commit message ---
-                    // Keywords (Spanish): "MAYOR" = major bump, "MINOR" = minor bump, else patch bump.
 
                     // Ensure zip is available in the container
                     sh 'apt-get update -qq && apt-get install -y -qq zip'
 
-                    // Get latest tag (strip 'v' prefix if present)
-                    def latestTag = sh(script: 'git tag --sort=-v:refname | head -1', returnStdout: true).trim()
-                    def (major, minor, patch) = [0, 0, 0]
+                    def [version, commitMsg] = SemanticVersion()
 
-                    if (latestTag) {
-                        def ver = latestTag.replaceAll('^v', '')
-                        def parts = ver.split('\\.')
-                        if (parts.size() == 3) {
-                            major = parts[0] as int
-                            minor = parts[1] as int
-                            patch = parts[2] as int
-                        }
-                    }
-
-                    // Get current commit message (first line)
-                    def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
-
-                    if (commitMsg.startsWith('MAJOR')) {
-                        major++
-                        minor = 0
-                        patch = 0
-                    } else if (commitMsg.startsWith('MINOR')) {
-                        minor++
-                        patch = 0
-                    } else {
-                        patch++
-                    }
-
-                    def version = "${major}.${minor}.${patch}"
                     echo "Derived version: ${version} (from commit: ${commitMsg.take(50)})"
 
                     // Tag the commit and push using GitHub token credential
@@ -101,12 +110,14 @@ pipeline {
                     def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
                     def artifactName = "${PROJECT_NAME}-${fullVersion}.zip"
 
-                    sh 'mkdir -p /jenkins/artifacts'
-                    sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
+                    echo "Packaging artifact: ${artifactName}"
+
+                    // sh 'mkdir -p /jenkins/artifacts'
+                    // sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
 
                     // Copy to workspace so archiveArtifacts can find it
-                    sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
-                    archiveArtifacts artifacts: "${artifactName}", fingerprint: true
+                    // sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
+                    // archiveArtifacts artifacts: "${artifactName}", fingerprint: true
                 }
             }
         }
