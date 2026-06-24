@@ -51,13 +51,13 @@ def archiveBuild(String projectName, String version) {
 node {
     env.PROJECT_NAME = 'jenkinsTests'
 
-    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root') {
+    stage('Checkout') {
+        checkout scm
+        // Mark workspace as safe for git (container user != host user)
+        sh 'git config --global --add safe.directory "$(pwd)"'
+    }
 
-        stage('Checkout') {
-            checkout scm
-            // Mark workspace as safe for git (container user != host user)
-            sh 'git config --global --add safe.directory "$(pwd)"'
-        }
+    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root') {
 
         stage('Restore') {
             sh 'dotnet restore'
