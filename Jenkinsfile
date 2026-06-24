@@ -36,7 +36,8 @@ def computeSemver() {
 }
 
 def archiveBuild(String projectName, String version) {
-    def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
+    // def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
+    def fullVersion = "${version}"
     def artifactName = "${projectName}-${fullVersion}.zip"
 
     sh 'mkdir -p /jenkins/artifacts'
@@ -48,6 +49,8 @@ def archiveBuild(String projectName, String version) {
 }
 
 node {
+    env.PROJECT_NAME = 'jenkinsTests'
+
     docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root') {
 
         stage('Checkout') {
