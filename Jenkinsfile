@@ -1,134 +1,98 @@
-pipeline {
-    agent {
-        docker {
-            image 'mcr.microsoft.com/dotnet/sdk:10.0'
-            args '-u root:root'
+def computeSemver() {
+    // Keywords: "MAJOR" = major bump, "MINOR" = minor bump, else patch bump.
+
+    // Get latest tag (strip 'v' prefix if present)
+    def latestTag = sh(script: 'git tag --sort=-v:refname | head -1', returnStdout: true).trim()
+    def (major, minor, patch) = [0, 0, 0]
+
+    if (latestTag) {
+        def ver = latestTag.replaceAll('^v', '')
+        def parts = ver.split('\\.')
+        if (parts.size() == 3) {
+            major = parts[0] as int
+            minor = parts[1] as int
+            patch = parts[2] as int
         }
     }
 
-    environment {
-        PROJECT_NAME = 'jenkinsTests'
+    // Get current commit message (first line)
+    def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+
+    if (commitMsg.startsWith('MAJOR')) {
+        major++
+        minor = 0
+        patch = 0
+    } else if (commitMsg.startsWith('MINOR')) {
+        minor++
+        patch = 0
+    } else {
+        patch++
     }
 
-    def SemanticVersion()
-    {
-        // --- Semver versioning from git tags + commit message ---
-        // Keywords: "MAJOR" = major bump, "MINOR" = minor bump, else patch bump.
+    def version = "${major}.${minor}.${patch}"
+    echo "Derived version: ${version} (from commit: ${commitMsg.take(50)})"
 
-        // Get latest tag (strip 'v' prefix if present)
-        def latestTag = sh(script: 'git tag --sort=-v:refname | head -1', returnStdout: true).trim()
-        def (major, minor, patch) = [0, 0, 0]
+    return version
+}
 
-        if (latestTag) {
-            def ver = latestTag.replaceAll('^v', '')
-            def parts = ver.split('\\.')
-            if (parts.size() == 3) {
-                major = parts[0] as int
-                minor = parts[1] as int
-                patch = parts[2] as int
-            }
-        }
+def archiveBuild(String projectName, String version) {
+    def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
+    def artifactName = "${projectName}-${fullVersion}.zip"
 
-        // Get current commit message (first line)
-        def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+    sh 'mkdir -p /jenkins/artifacts'
+    sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
 
-        if (commitMsg.startsWith('MAJOR')) {
-            major++
-            minor = 0
-            patch = 0
-        } else if (commitMsg.startsWith('MINOR')) {
-            minor++
-            patch = 0
-        } else {
-            patch++
-        }
+    // Copy to workspace so archiveArtifacts can find it
+    sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
+    archiveArtifacts artifacts: "${artifactName}", fingerprint: true
+}
 
-        def version = "${major}.${minor}.${patch}"
+node {
+    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root') {
 
-        return [version, commitMsg]
-    }
-
-    stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-                // Mark workspace as safe for git (container user != host user)
-                sh 'git config --global --add safe.directory "$(pwd)"'
-            }
+            checkout scm
+            // Mark workspace as safe for git (container user != host user)
+            sh 'git config --global --add safe.directory "$(pwd)"'
         }
 
         stage('Restore') {
-            steps {
-                sh 'dotnet restore'
-            }
+            sh 'dotnet restore'
         }
 
         stage('Build') {
-            steps {
-                sh 'dotnet build --configuration Release --no-restore'
-            }
+            sh 'dotnet build --configuration Release --no-restore'
         }
 
         stage('Test') {
-            steps {
-                sh 'echo "No test project yet — skipping."'
-                // sh 'dotnet test --configuration Release --no-build'
-            }
+            echo 'No test project yet — skipping.'
+            // sh 'dotnet test --configuration Release --no-build'
         }
 
         stage('Publish') {
-            steps {
-                sh 'dotnet publish --configuration Release --no-build --output ./publish'
-            }
+            sh 'dotnet publish --configuration Release --no-build --output ./publish'
         }
 
         stage('Package') {
-            steps {
-                script {
+            // Ensure zip is available in the container
+            sh 'apt-get update -qq && apt-get install -y -qq zip'
 
-                    // Ensure zip is available in the container
-                    sh 'apt-get update -qq && apt-get install -y -qq zip'
+            def version = computeSemver()
 
-                    def [version, commitMsg] = SemanticVersion()
-
-                    echo "Derived version: ${version} (from commit: ${commitMsg.take(50)})"
-
-                    // Tag the commit and push using GitHub token credential
-                    withCredentials([usernamePassword(
-                        credentialsId: 'github-token',
-                        usernameVariable: 'GIT_USER',
-                        passwordVariable: 'GIT_TOKEN'
-                    )]) {
-                        sh "git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/ketsalmrd/jenkinsTests.git"
-                        sh "git config user.name 'Jenkins CI'"
-                        sh "git config user.email 'jenkins@${env.NODE_NAME}'"
-                        sh "git tag -a \"v${version}\" -m \"Version ${version}\""
-                        sh 'git push origin --tags'
-                    }
-
-                    // Build artifact name
-                    def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
-                    def artifactName = "${PROJECT_NAME}-${fullVersion}.zip"
-
-                    echo "Packaging artifact: ${artifactName}"
-
-                    // sh 'mkdir -p /jenkins/artifacts'
-                    // sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
-
-                    // Copy to workspace so archiveArtifacts can find it
-                    // sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
-                    // archiveArtifacts artifacts: "${artifactName}", fingerprint: true
-                }
+            // Tag the commit and push using GitHub token credential
+            withCredentials([usernamePassword(
+                credentialsId: 'github-token',
+                usernameVariable: 'GIT_USER',
+                passwordVariable: 'GIT_TOKEN'
+            )]) {
+                sh "git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/ketsalmrd/jenkinsTests.git"
+                sh "git config user.name 'Jenkins CI'"
+                sh "git config user.email 'jenkins@${env.NODE_NAME}'"
+                sh "git tag -a \"v${version}\" -m \"Version ${version}\""
+                sh 'git push origin --tags'
             }
-        }
-    }
 
-    post {
-        success {
-            echo "Pipeline completed successfully."
-        }
-        failure {
-            echo "Pipeline failed."
+            archiveBuild(env.PROJECT_NAME, version)
         }
     }
 }
