@@ -36,7 +36,6 @@ def computeSemver() {
 }
 
 def archiveBuild(String projectName, String version) {
-    // def fullVersion = "${version}+build.${env.BUILD_NUMBER}"
     def fullVersion = "${version}"
     def artifactName = "${projectName}-${fullVersion}.zip"
 
@@ -51,13 +50,13 @@ def archiveBuild(String projectName, String version) {
 node {
     env.PROJECT_NAME = 'jenkinsTests'
 
-    stage('Checkout') {
-        checkout scm
-        // Mark workspace as safe for git (container user != host user)
-        sh 'git config --global --add safe.directory "$(pwd)"'
-    }
+    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root -v /jenkins/artifacts:/jenkins/artifacts') {
 
-    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root') {
+        stage('Checkout') {
+            checkout scm
+            // Mark workspace as safe for git (container user != host user)
+            sh 'git config --global --add safe.directory "$(pwd)"'
+        }
 
         stage('Restore') {
             sh 'dotnet restore'
