@@ -36,11 +36,9 @@ def computeSemver() {
 }
 
 def archiveBuild(String projectName, String version) {
-    def fullVersion = "${version}"
-    def artifactName = "${projectName}-${fullVersion}.zip"
+    def artifactName = "${projectName}-${version}.tar.gz"
 
-    sh 'mkdir -p /jenkins/artifacts'
-    sh "zip -j \"/jenkins/artifacts/${artifactName}\" ./publish/*"
+    sh "tar -czf \"/jenkins/artifacts/${artifactName}\" -C ./publish ."
 
     // Copy to workspace so archiveArtifacts can find it
     sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
@@ -56,7 +54,7 @@ node {
         sh 'git config --global --add safe.directory "$(pwd)"'
     }
 
-    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-u root:root -v /jenkins/artifacts:/jenkins/artifacts') {
+    docker.image('mcr.microsoft.com/dotnet/sdk:10.0').inside('-v /jenkins/artifacts:/jenkins/artifacts') {
 
         stage('Restore') {
             sh 'dotnet restore'
@@ -76,9 +74,6 @@ node {
         }
 
         stage('Package') {
-            // Ensure zip is available in the container
-            sh 'apt-get update -qq && apt-get install -y -qq zip'
-
             def version = computeSemver()
 
             // Tag the commit and push using GitHub token credential
