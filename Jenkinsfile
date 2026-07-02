@@ -38,10 +38,10 @@ def computeSemver() {
 def archiveBuild(String projectName, String version) {
     def artifactName = "${projectName}-${version}.tar.gz"
 
-    sh "tar -czf \"/jenkins/artifacts/${artifactName}\" -C ./publish ."
+    sh "tar -czf \"/artifacts/${artifactName}\" -C ./publish ."
 
     // Copy to workspace so archiveArtifacts can find it
-    sh "cp \"/jenkins/artifacts/${artifactName}\" \"./${artifactName}\""
+    sh "cp \"/artifacts/${artifactName}\" \"./${artifactName}\""
     archiveArtifacts artifacts: "${artifactName}", fingerprint: true
 }
 
